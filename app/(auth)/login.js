@@ -1,22 +1,92 @@
-import { View, Text, TextInput, StyleSheet, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
-import { useState } from 'react';
+import { View, Text, TextInput, StyleSheet, Pressable, KeyboardAvoidingView, Platform, Image, Alert } from 'react-native';
+import { useState, useEffect } from 'react';
 import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Circle, Line } from 'react-native-svg';
+import { useAuth } from '../../contexts/AuthContext';
+import biometric from '../../services/biometric';
+import { getPatientSecure } from '../../services/secureStorage';
 
-// Wolf HMS Theme
+// Premium Aurora Neural Theme
 const theme = {
-    primary: '#10B981',
-    darkNavy: '#0f172a',
-    tealDark: '#0d3d56',
-    lightCream: '#f0f9ff',
+    gradientStart: '#0f172a',
+    gradientMid: '#1e293b',
+    gradientEnd: '#0f172a',
+    primary: '#14b8a6',
+    secondary: '#8b5cf6',
+    accent: '#f472b6',
+    cyan: '#06b6d4',
     white: '#ffffff',
-    gray: '#94a3b8',
+    textPrimary: '#f8fafc',
+    textSecondary: 'rgba(255,255,255,0.7)',
+    textMuted: 'rgba(255,255,255,0.5)',
+    glassBackground: 'rgba(255,255,255,0.08)',
+    glassBorder: 'rgba(255,255,255,0.15)',
     error: '#ef4444',
 };
 
+// Neural Background
+const NeuralBackground = () => (
+    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+        <Circle cx="50" cy="150" r="3" fill={theme.cyan} opacity={0.4} />
+        <Circle cx="320" cy="100" r="4" fill={theme.accent} opacity={0.3} />
+        <Circle cx="80" cy="500" r="2" fill={theme.primary} opacity={0.5} />
+        <Circle cx="300" cy="600" r="3" fill={theme.secondary} opacity={0.4} />
+        <Line x1="50" y1="150" x2="320" y2="100" stroke={theme.cyan} strokeWidth="0.5" opacity={0.2} />
+        <Line x1="80" y1="500" x2="300" y2="600" stroke={theme.primary} strokeWidth="0.5" opacity={0.2} />
+    </Svg>
+);
+
 export default function LoginScreen() {
+    const { setPatient } = useAuth();
     const [phone, setPhone] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showBiometric, setShowBiometric] = useState(false);
+    const [biometricType, setBiometricType] = useState('biometric'); // face or fingerprint
+
+    useEffect(() => {
+        checkBiometric();
+    }, []);
+
+    const checkBiometric = async () => {
+        const available = await biometric.isBiometricAvailable();
+        const enabled = await biometric.isBiometricLoginEnabled();
+        const type = await biometric.getBiometricType();
+        
+        setBiometricType(type);
+        if (available && enabled) {
+            setShowBiometric(true);
+        }
+    };
+
+    const handleBiometricLogin = async () => {
+        setLoading(true);
+        setError('');
+        
+        const result = await biometric.authenticateWithBiometric();
+        
+        if (result.success) {
+            // Get cached patient data
+            const cachedPatient = await getPatientSecure();
+            const bioPhone = await biometric.getBiometricPhone();
+            
+            if (cachedPatient && bioPhone && cachedPatient.phone === bioPhone) {
+                // Success - Log in offline/online
+                await setPatient(cachedPatient);
+                router.replace('/(tabs)');
+            } else {
+                setError('Biometric login failed. Patient data not found.');
+                setLoading(false);
+            }
+        } else {
+            console.log('Biometric failed or cancelled');
+            setLoading(false);
+            if (result.error !== 'user_cancel') {
+                 // Don't show error on manual cancel, just silent fail
+            }
+        }
+    };
 
     const handleSendOTP = async () => {
         // Validate phone number
@@ -29,8 +99,7 @@ export default function LoginScreen() {
         setError('');
         setLoading(true);
 
-        // For demo, skip actual Firebase OTP and go to verify screen
-        // In production, you would call Firebase signInWithPhoneNumber here
+        // Navigate to verify screen
         setTimeout(() => {
             setLoading(false);
             router.push({
@@ -41,157 +110,253 @@ export default function LoginScreen() {
     };
 
     return (
-        <KeyboardAvoidingView 
-            style={styles.container}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-            <View style={styles.content}>
-                {/* Header */}
+        <View style={styles.container}>
+            <LinearGradient
+                colors={[theme.gradientStart, theme.gradientMid, theme.gradientEnd]}
+                style={StyleSheet.absoluteFill}
+            />
+            <NeuralBackground />
+            
+            <KeyboardAvoidingView 
+                style={styles.content}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            >
+                {/* Header with Logo */}
                 <View style={styles.header}>
-                    <Text style={styles.emoji}>🐺</Text>
-                    <Text style={styles.title}>Welcome to Wolf Care</Text>
+                    <View style={styles.logoGlow}>
+                        <Image 
+                            source={require('../../assets/wolf-logo.png')} 
+                            style={styles.logo}
+                            resizeMode="contain"
+                        />
+                    </View>
+                    <Text style={styles.title}>Welcome to Wolf <Text style={styles.titleAccent}>Care</Text></Text>
                     <Text style={styles.subtitle}>Enter your phone number to continue</Text>
                 </View>
 
                 {/* Phone Input */}
-                <View style={styles.inputContainer}>
-                    <View style={styles.phoneRow}>
+                <View style={styles.inputSection}>
+                    <View style={styles.inputContainer}>
                         <View style={styles.countryCode}>
-                            <Text style={styles.countryText}>🇮🇳 +91</Text>
+                            <Text style={styles.flag}>🇮🇳</Text>
+                            <Text style={styles.code}>+91</Text>
                         </View>
+                        <View style={styles.divider} />
                         <TextInput
                             style={styles.phoneInput}
                             placeholder="Enter phone number"
-                            placeholderTextColor={theme.gray}
+                            placeholderTextColor={theme.textMuted}
+                            keyboardType="phone-pad"
                             value={phone}
                             onChangeText={setPhone}
-                            keyboardType="phone-pad"
                             maxLength={10}
                         />
                     </View>
-                    {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                    
+                    {error ? (
+                        <Text style={styles.errorText}>{error}</Text>
+                    ) : null}
+
+                    {/* Send OTP Button */}
+                    <Pressable 
+                        style={[styles.sendBtn, loading && styles.sendBtnDisabled]}
+                        onPress={handleSendOTP}
+                        disabled={loading}
+                    >
+                        <LinearGradient
+                            colors={loading ? [theme.textMuted, theme.textMuted] : [theme.primary, theme.cyan]}
+                            style={styles.sendGradient}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                        >
+                            <Text style={styles.sendText}>
+                                {loading ? 'SENDING...' : 'SEND OTP'}
+                            </Text>
+                        </LinearGradient>
+                    </Pressable>
+
+                    {/* Biometric Login Button - Only if enabled */}
+                    {showBiometric && (
+                        <Pressable 
+                            style={styles.biometricBtn}
+                            onPress={handleBiometricLogin}
+                            disabled={loading}
+                        >
+                            <Text style={styles.biometricIcon}>
+                                {biometricType === 'face' ? '👤' : '👆'}
+                            </Text>
+                            <Text style={styles.biometricText}>
+                                Login with {biometricType === 'face' ? 'Face ID' : 'Fingerprint'}
+                            </Text>
+                        </Pressable>
+                    )}
+
+                    {/* Back Link */}
+                    <Pressable onPress={() => router.back()} style={styles.backLink}>
+                        <Text style={styles.backText}>← Back to Home</Text>
+                    </Pressable>
                 </View>
 
-                {/* Send OTP Button */}
-                <Pressable 
-                    style={[styles.button, loading && styles.buttonDisabled]}
-                    onPress={handleSendOTP}
-                    disabled={loading}
-                >
-                    <Text style={styles.buttonText}>
-                        {loading ? 'Sending OTP...' : 'SEND OTP'}
+                {/* Footer */}
+                <View style={styles.footer}>
+                    <Text style={styles.footerText}>
+                        By continuing, you agree to our{' '}
+                        <Text style={styles.link}>Terms</Text> &{' '}
+                        <Text style={styles.link}>Privacy Policy</Text>
                     </Text>
-                </Pressable>
-
-                {/* Back Link */}
-                <Pressable onPress={() => router.back()} style={styles.backLink}>
-                    <Text style={styles.backText}>← Back to Home</Text>
-                </Pressable>
-            </View>
-
-            {/* Footer */}
-            <Text style={styles.footer}>
-                By continuing, you agree to our Terms & Privacy Policy
-            </Text>
-        </KeyboardAvoidingView>
+                </View>
+            </KeyboardAvoidingView>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: theme.lightCream,
+        backgroundColor: theme.gradientStart,
     },
     content: {
         flex: 1,
-        padding: 24,
-        justifyContent: 'center',
+        paddingHorizontal: 24,
+        justifyContent: 'space-between',
+        paddingVertical: 60,
     },
     header: {
         alignItems: 'center',
-        marginBottom: 40,
+        paddingTop: 60,
     },
-    emoji: {
-        fontSize: 64,
-        marginBottom: 16,
+    logoGlow: {
+        width: 100,
+        height: 100,
+        borderRadius: 24,
+        backgroundColor: 'rgba(20, 184, 166, 0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    logo: {
+        width: 80,
+        height: 80,
+        borderRadius: 16,
     },
     title: {
         fontSize: 28,
         fontWeight: 'bold',
-        color: theme.darkNavy,
+        color: theme.white,
         marginBottom: 8,
+        textAlign: 'center',
+    },
+    titleAccent: {
+        color: theme.accent,
     },
     subtitle: {
         fontSize: 16,
-        color: theme.gray,
+        color: theme.textSecondary,
         textAlign: 'center',
     },
-    inputContainer: {
-        marginBottom: 24,
+    inputSection: {
+        width: '100%',
     },
-    phoneRow: {
+    inputContainer: {
         flexDirection: 'row',
-        backgroundColor: theme.white,
-        borderRadius: 12,
+        alignItems: 'center',
+        backgroundColor: theme.glassBackground,
+        borderRadius: 16,
         borderWidth: 1,
-        borderColor: '#e2e8f0',
+        borderColor: theme.glassBorder,
         overflow: 'hidden',
+        marginBottom: 12,
     },
     countryCode: {
-        backgroundColor: '#f1f5f9',
+        flexDirection: 'row',
+        alignItems: 'center',
         paddingHorizontal: 16,
-        justifyContent: 'center',
-        borderRightWidth: 1,
-        borderRightColor: '#e2e8f0',
+        paddingVertical: 16,
     },
-    countryText: {
+    flag: {
+        fontSize: 20,
+        marginRight: 8,
+    },
+    code: {
         fontSize: 16,
-        color: theme.darkNavy,
+        color: theme.white,
+        fontWeight: '500',
+    },
+    divider: {
+        width: 1,
+        height: 30,
+        backgroundColor: theme.glassBorder,
     },
     phoneInput: {
         flex: 1,
-        padding: 16,
+        paddingHorizontal: 16,
+        paddingVertical: 16,
         fontSize: 18,
-        color: theme.darkNavy,
+        color: theme.white,
+        letterSpacing: 2,
     },
     errorText: {
         color: theme.error,
-        fontSize: 14,
-        marginTop: 8,
+        fontSize: 13,
+        marginBottom: 12,
         marginLeft: 4,
     },
-    button: {
-        backgroundColor: theme.primary,
-        padding: 16,
-        borderRadius: 12,
-        alignItems: 'center',
-        shadowColor: theme.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 4,
+    sendBtn: {
+        borderRadius: 16,
+        overflow: 'hidden',
+        marginTop: 8,
     },
-    buttonDisabled: {
+    sendBtnDisabled: {
         opacity: 0.7,
     },
-    buttonText: {
-        color: theme.white,
-        fontSize: 16,
-        fontWeight: 'bold',
-        letterSpacing: 1,
-    },
-    backLink: {
-        marginTop: 20,
+    sendGradient: {
+        paddingVertical: 18,
         alignItems: 'center',
     },
+    sendText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: theme.white,
+        letterSpacing: 2,
+    },
+    biometricBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        paddingVertical: 16,
+        borderRadius: 16,
+        marginTop: 16,
+        borderWidth: 1,
+        borderColor: theme.glassBorder,
+    },
+    biometricIcon: {
+        fontSize: 20,
+        marginRight: 10,
+    },
+    biometricText: {
+        color: theme.white,
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    backLink: {
+        alignItems: 'center',
+        marginTop: 20,
+    },
     backText: {
-        color: theme.gray,
         fontSize: 14,
+        color: theme.textSecondary,
     },
     footer: {
-        textAlign: 'center',
-        color: theme.gray,
+        alignItems: 'center',
+        marginTop: 20,
+    },
+    footerText: {
         fontSize: 12,
-        padding: 20,
+        color: theme.textMuted,
+        textAlign: 'center',
+    },
+    link: {
+        color: theme.primary,
     },
 });

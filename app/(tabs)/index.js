@@ -1,19 +1,75 @@
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, Image, Dimensions } from 'react-native';
 import { useState, useCallback } from 'react';
 import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Circle, Line, Path, Defs, RadialGradient, Stop } from 'react-native-svg';
 
-// Wolf HMS Theme
+const { width } = Dimensions.get('window');
+
+// Premium Aurora Neural Theme
 const theme = {
-    primary: '#10B981',
-    darkNavy: '#0f172a',
-    tealDark: '#0d3d56',
-    lightCream: '#f0f9ff',
+    // Gradients
+    gradientStart: '#0f172a',    // Deep navy
+    gradientMid: '#1e293b',      // Slate
+    gradientEnd: '#0f172a',      // Deep navy
+    
+    // Accent colors
+    primary: '#14b8a6',          // Teal
+    secondary: '#8b5cf6',        // Purple
+    accent: '#f472b6',           // Pink
+    cyan: '#06b6d4',             // Cyan
+    
+    // Glass colors
+    glassBackground: 'rgba(255,255,255,0.08)',
+    glassBorder: 'rgba(255,255,255,0.15)',
+    
+    // Text
     white: '#ffffff',
-    gray: '#94a3b8',
+    textPrimary: '#f8fafc',
+    textSecondary: 'rgba(255,255,255,0.7)',
+    textMuted: 'rgba(255,255,255,0.5)',
+    
+    // Status
+    success: '#10b981',
     warning: '#f59e0b',
     error: '#ef4444',
-    info: '#3b82f6',
 };
+
+// Neural Network Background Component
+const NeuralBackground = () => (
+    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+        <Defs>
+            <RadialGradient id="nodeGlow" cx="50%" cy="50%" r="50%">
+                <Stop offset="0%" stopColor={theme.cyan} stopOpacity="0.6" />
+                <Stop offset="100%" stopColor={theme.cyan} stopOpacity="0" />
+            </RadialGradient>
+        </Defs>
+        
+        {/* Neural network nodes */}
+        <Circle cx="50" cy="80" r="4" fill={theme.cyan} opacity={0.6} />
+        <Circle cx="120" cy="40" r="3" fill={theme.accent} opacity={0.4} />
+        <Circle cx="200" cy="100" r="5" fill={theme.primary} opacity={0.5} />
+        <Circle cx="280" cy="60" r="3" fill={theme.secondary} opacity={0.4} />
+        <Circle cx="350" cy="90" r="4" fill={theme.cyan} opacity={0.5} />
+        
+        {/* Connection lines */}
+        <Line x1="50" y1="80" x2="120" y2="40" stroke={theme.cyan} strokeWidth="0.5" opacity={0.3} />
+        <Line x1="120" y1="40" x2="200" y2="100" stroke={theme.primary} strokeWidth="0.5" opacity={0.3} />
+        <Line x1="200" y1="100" x2="280" y2="60" stroke={theme.accent} strokeWidth="0.5" opacity={0.2} />
+        <Line x1="280" y1="60" x2="350" y2="90" stroke={theme.secondary} strokeWidth="0.5" opacity={0.3} />
+        
+        {/* Additional decorative nodes */}
+        <Circle cx={width - 40} cy="150" r="2" fill={theme.accent} opacity={0.3} />
+        <Circle cx="30" cy="200" r="2" fill={theme.primary} opacity={0.4} />
+    </Svg>
+);
+
+// Glass Card Component
+const GlassCard = ({ children, style }) => (
+    <View style={[styles.glassCard, style]}>
+        {children}
+    </View>
+);
 
 export default function HomeScreen() {
     const [refreshing, setRefreshing] = useState(false);
@@ -23,237 +79,460 @@ export default function HomeScreen() {
         setTimeout(() => setRefreshing(false), 1500);
     }, []);
 
-    const quickActions = [
-        { id: 1, icon: '📅', title: 'Book Appointment', route: '/(tabs)/appointments', color: theme.primary },
-        { id: 2, icon: '🧪', title: 'Lab Tests', route: '/(tabs)/records', color: theme.info },
-        { id: 3, icon: '💊', title: 'Pharmacy', route: '/(tabs)/records', color: theme.warning },
-        { id: 4, icon: '🤖', title: 'AI Health Guard', route: '/ai/chat', color: '#8b5cf6' },
-    ];
-
     const healthStats = [
-        { id: 1, icon: '❤️', label: 'Heart Rate', value: '72', unit: 'bpm', status: 'normal' },
-        { id: 2, icon: '🩸', label: 'Blood Pressure', value: '120/80', unit: 'mmHg', status: 'normal' },
-        { id: 3, icon: '🌡️', label: 'Temperature', value: '98.6', unit: '°F', status: 'normal' },
+        { id: 1, label: 'Heart Rate', value: '72', unit: 'BPM', icon: '❤️', color: theme.accent },
+        { id: 2, label: 'Blood Pressure', value: '120/80', unit: 'mmHg', icon: '🩸', color: theme.cyan },
+        { id: 3, label: 'Sleep Quality', value: '85%', unit: '', icon: '🌙', color: theme.secondary },
     ];
 
-    const recentActivity = [
-        { id: 1, type: 'appointment', title: 'Dr. Sharma - Cardiology', date: 'Dec 10, 2024', status: 'completed' },
-        { id: 2, type: 'lab', title: 'Complete Blood Count', date: 'Dec 8, 2024', status: 'results ready' },
-        { id: 3, type: 'prescription', title: 'Metformin 500mg', date: 'Dec 5, 2024', status: 'active' },
+    const aiPrediction = {
+        status: 'Stable Wellness',
+        message: 'Based on your recent activity, your health forecast looks positive. Keep it up!',
+        days: 7,
+    };
+
+    const upcomingTasks = [
+        { id: 1, icon: '💊', title: 'Medication Reminder', time: '10:00 AM' },
+        { id: 2, icon: '📅', title: 'Schedule Check-up', note: 'Recommended' },
     ];
 
     return (
-        <ScrollView 
-            style={styles.container}
-            refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
-            }
-        >
-            {/* Header */}
-            <View style={styles.header}>
-                <View style={styles.headerTop}>
-                    <View>
-                        <Text style={styles.greeting}>Hello, Patient 👋</Text>
-                        <Text style={styles.subtitle}>How are you feeling today?</Text>
-                    </View>
-                    <Pressable style={styles.notificationBtn}>
-                        <Text style={styles.notificationIcon}>🔔</Text>
-                        <View style={styles.notificationBadge} />
-                    </Pressable>
-                </View>
-            </View>
-
-            {/* Health Stats */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Your Health</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsScroll}>
-                    {healthStats.map((stat) => (
-                        <View key={stat.id} style={styles.statCard}>
-                            <Text style={styles.statIcon}>{stat.icon}</Text>
-                            <Text style={styles.statLabel}>{stat.label}</Text>
-                            <View style={styles.statValueRow}>
-                                <Text style={styles.statValue}>{stat.value}</Text>
-                                <Text style={styles.statUnit}>{stat.unit}</Text>
-                            </View>
-                            <View style={styles.statusBadge}>
-                                <Text style={styles.statusText}>✓ Normal</Text>
+        <View style={styles.container}>
+            <LinearGradient
+                colors={[theme.gradientStart, theme.gradientMid, theme.gradientEnd]}
+                style={StyleSheet.absoluteFill}
+            />
+            <NeuralBackground />
+            
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
+                }
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Header with AI Branding */}
+                <View style={styles.header}>
+                    <View style={styles.headerContent}>
+                        <Image 
+                            source={require('../../assets/wolf-logo.png')} 
+                            style={styles.headerLogo}
+                            resizeMode="contain"
+                        />
+                        <View style={styles.headerText}>
+                            <Text style={styles.brandName}>Wolf <Text style={styles.brandAccent}>Care</Text></Text>
+                            <View style={styles.aiPill}>
+                                <Text style={styles.aiPillIcon}>🧠</Text>
+                                <Text style={styles.aiPillText}>Health insights powered by AI</Text>
                             </View>
                         </View>
-                    ))}
-                </ScrollView>
-            </View>
+                    </View>
+                </View>
 
-            {/* Quick Actions */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Quick Actions</Text>
-                <View style={styles.grid}>
-                    {quickActions.map((action) => (
-                        <Pressable 
-                            key={action.id} 
-                            style={[styles.actionCard, { borderLeftColor: action.color }]}
-                            onPress={() => router.push(action.route)}
-                        >
-                            <Text style={styles.actionIcon}>{action.icon}</Text>
-                            <Text style={styles.actionTitle}>{action.title}</Text>
+                {/* Daily Health Snapshot - Main Card */}
+                <GlassCard style={styles.mainCard}>
+                    <View style={styles.mainCardHeader}>
+                        <Text style={styles.cardTitle}>Daily Health Snapshot</Text>
+                        <Pressable style={styles.notificationBtn}>
+                            <Text style={styles.notificationIcon}>🔔</Text>
                         </Pressable>
-                    ))}
-                </View>
-            </View>
-
-            {/* Upcoming Appointment */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Upcoming</Text>
-                <View style={styles.appointmentCard}>
-                    <View style={styles.appointmentLeft}>
-                        <View style={styles.dateBox}>
-                            <Text style={styles.dateDay}>15</Text>
-                            <Text style={styles.dateMonth}>DEC</Text>
+                    </View>
+                    
+                    <View style={styles.healthRow}>
+                        {/* Human Body Silhouette */}
+                        <View style={styles.bodyContainer}>
+                            <View style={styles.bodySilhouette}>
+                                <Text style={styles.bodyEmoji}>🧍</Text>
+                            </View>
+                        </View>
+                        
+                        {/* Health Metrics */}
+                        <View style={styles.metricsContainer}>
+                            {healthStats.map((stat) => (
+                                <View key={stat.id} style={styles.metricRow}>
+                                    <Text style={styles.metricIcon}>{stat.icon}</Text>
+                                    <View style={styles.metricInfo}>
+                                        <Text style={styles.metricLabel}>{stat.label}</Text>
+                                        <View style={styles.metricValueRow}>
+                                            <Text style={styles.metricValue}>{stat.value}</Text>
+                                            <Text style={styles.metricUnit}>{stat.unit}</Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            ))}
                         </View>
                     </View>
-                    <View style={styles.appointmentRight}>
-                        <Text style={styles.appointmentTime}>10:00 AM</Text>
-                        <Text style={styles.appointmentDoctor}>Dr. Priya Sharma</Text>
-                        <Text style={styles.appointmentDept}>Cardiology • Room 204</Text>
-                        <View style={styles.appointmentActions}>
-                            <Pressable style={styles.rescheduleBtn}>
-                                <Text style={styles.rescheduleBtnText}>Reschedule</Text>
-                            </Pressable>
-                            <Pressable style={styles.joinBtn}>
-                                <Text style={styles.joinBtnText}>Join Call</Text>
-                            </Pressable>
+                </GlassCard>
+
+                {/* Personalized Insights Section */}
+                <Text style={styles.sectionTitle}>Personalized Insights</Text>
+                
+                <View style={styles.insightsRow}>
+                    {/* AI Prediction Card */}
+                    <GlassCard style={styles.insightCard}>
+                        <View style={styles.insightHeader}>
+                            <Text style={styles.insightIcon}>📊</Text>
+                            <Text style={styles.insightTitle}>AI Prediction</Text>
+                        </View>
+                        <View style={styles.trendLine}>
+                            <View style={[styles.trendDot, { backgroundColor: theme.primary }]} />
+                            <View style={styles.trendPath} />
+                        </View>
+                        <Text style={styles.predictionLabel}>Next {aiPrediction.days} Days: <Text style={styles.predictionValue}>{aiPrediction.status}</Text></Text>
+                        <Text style={styles.predictionMessage}>{aiPrediction.message}</Text>
+                    </GlassCard>
+
+                    {/* Upcoming Tasks Card */}
+                    <GlassCard style={styles.insightCard}>
+                        <View style={styles.insightHeader}>
+                            <Text style={styles.insightIcon}>📋</Text>
+                            <Text style={styles.insightTitle}>Upcoming Tasks</Text>
+                        </View>
+                        {upcomingTasks.map((task) => (
+                            <View key={task.id} style={styles.taskRow}>
+                                <Text style={styles.taskIcon}>{task.icon}</Text>
+                                <View style={styles.taskInfo}>
+                                    <Text style={styles.taskTitle}>{task.title}</Text>
+                                    <Text style={styles.taskNote}>{task.time || task.note}</Text>
+                                </View>
+                            </View>
+                        ))}
+                    </GlassCard>
+                </View>
+
+                {/* Wellness Trends Chart */}
+                <GlassCard style={styles.chartCard}>
+                    <View style={styles.chartHeader}>
+                        <Text style={styles.cardTitle}>Wellness Trends (Last 30 Days)</Text>
+                        <View style={styles.filterBtn}>
+                            <Text style={styles.filterText}>Filter</Text>
                         </View>
                     </View>
-                </View>
-            </View>
+                    <View style={styles.chartLegend}>
+                        <View style={styles.legendItem}>
+                            <View style={[styles.legendDot, { backgroundColor: theme.primary }]} />
+                            <Text style={styles.legendText}>Steps</Text>
+                        </View>
+                        <View style={styles.legendItem}>
+                            <View style={[styles.legendDot, { backgroundColor: theme.accent }]} />
+                            <Text style={styles.legendText}>Calories Burned</Text>
+                        </View>
+                        <View style={styles.legendItem}>
+                            <View style={[styles.legendDot, { backgroundColor: theme.secondary }]} />
+                            <Text style={styles.legendText}>Stress</Text>
+                        </View>
+                    </View>
+                    {/* Chart Placeholder - Wave Lines */}
+                    <View style={styles.chartArea}>
+                        <Svg width="100%" height="80">
+                            <Path
+                                d="M0 40 Q40 20 80 40 T160 40 T240 40 T320 40"
+                                stroke={theme.primary}
+                                strokeWidth="2"
+                                fill="none"
+                                opacity={0.8}
+                            />
+                            <Path
+                                d="M0 50 Q40 70 80 50 T160 50 T240 50 T320 50"
+                                stroke={theme.accent}
+                                strokeWidth="2"
+                                fill="none"
+                                opacity={0.6}
+                            />
+                            <Path
+                                d="M0 35 Q40 45 80 30 T160 35 T240 30 T320 35"
+                                stroke={theme.secondary}
+                                strokeWidth="2"
+                                fill="none"
+                                opacity={0.5}
+                            />
+                        </Svg>
+                    </View>
+                </GlassCard>
 
-            {/* Recent Activity */}
-            <View style={[styles.section, { paddingBottom: 100 }]}>
-                <Text style={styles.sectionTitle}>Recent Activity</Text>
-                {recentActivity.map((activity) => (
-                    <Pressable key={activity.id} style={styles.activityCard}>
-                        <View style={styles.activityIcon}>
-                            <Text style={styles.activityEmoji}>
-                                {activity.type === 'appointment' ? '📅' : activity.type === 'lab' ? '🧪' : '💊'}
-                            </Text>
-                        </View>
-                        <View style={styles.activityInfo}>
-                            <Text style={styles.activityTitle}>{activity.title}</Text>
-                            <Text style={styles.activityDate}>{activity.date}</Text>
-                        </View>
-                        <View style={[styles.activityStatus, 
-                            activity.status === 'completed' && styles.statusCompleted,
-                            activity.status === 'results ready' && styles.statusReady,
-                            activity.status === 'active' && styles.statusActive,
-                        ]}>
-                            <Text style={styles.activityStatusText}>{activity.status}</Text>
-                        </View>
-                    </Pressable>
-                ))}
-            </View>
-        </ScrollView>
+                {/* Bottom padding */}
+                <View style={{ height: 100 }} />
+            </ScrollView>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: theme.lightCream },
-    header: {
-        backgroundColor: theme.tealDark,
-        padding: 24,
+    container: {
+        flex: 1,
+        backgroundColor: theme.gradientStart,
+    },
+    scrollContent: {
         paddingTop: 60,
-        paddingBottom: 30,
-        borderBottomLeftRadius: 24,
-        borderBottomRightRadius: 24,
     },
-    headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-    greeting: { fontSize: 28, fontWeight: 'bold', color: theme.white },
-    subtitle: { fontSize: 16, color: theme.gray, marginTop: 4 },
+    
+    // Header
+    header: {
+        paddingHorizontal: 20,
+        paddingBottom: 20,
+    },
+    headerContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    headerLogo: {
+        width: 60,
+        height: 60,
+        borderRadius: 12,
+    },
+    headerText: {
+        marginLeft: 16,
+    },
+    brandName: {
+        fontSize: 28,
+        fontWeight: 'bold',
+        color: theme.white,
+    },
+    brandAccent: {
+        color: theme.accent,
+    },
+    aiPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(139, 92, 246, 0.3)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+        marginTop: 8,
+    },
+    aiPillIcon: {
+        fontSize: 14,
+        marginRight: 6,
+    },
+    aiPillText: {
+        fontSize: 12,
+        color: theme.textSecondary,
+    },
+    
+    // Glass Card
+    glassCard: {
+        backgroundColor: theme.glassBackground,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: theme.glassBorder,
+        marginHorizontal: 20,
+        marginBottom: 16,
+        padding: 20,
+        overflow: 'hidden',
+    },
+    
+    // Main Health Card
+    mainCard: {
+        marginTop: 8,
+    },
+    mainCardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    cardTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: theme.white,
+    },
     notificationBtn: {
-        width: 44, height: 44, borderRadius: 22,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
         backgroundColor: 'rgba(255,255,255,0.1)',
-        justifyContent: 'center', alignItems: 'center',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
-    notificationIcon: { fontSize: 20 },
-    notificationBadge: {
-        position: 'absolute', top: 8, right: 8,
-        width: 10, height: 10, borderRadius: 5,
-        backgroundColor: theme.error,
+    notificationIcon: {
+        fontSize: 16,
     },
-    section: { padding: 20, paddingBottom: 0 },
-    sectionTitle: { fontSize: 18, fontWeight: '600', color: theme.darkNavy, marginBottom: 16 },
-    statsScroll: { marginHorizontal: -20, paddingHorizontal: 20 },
-    statCard: {
-        backgroundColor: theme.white,
-        padding: 16, borderRadius: 16, marginRight: 12,
-        width: 140, alignItems: 'center',
-        shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+    healthRow: {
+        flexDirection: 'row',
     },
-    statIcon: { fontSize: 28, marginBottom: 8 },
-    statLabel: { fontSize: 12, color: theme.gray, marginBottom: 4 },
-    statValueRow: { flexDirection: 'row', alignItems: 'baseline' },
-    statValue: { fontSize: 24, fontWeight: 'bold', color: theme.darkNavy },
-    statUnit: { fontSize: 12, color: theme.gray, marginLeft: 4 },
-    statusBadge: {
-        backgroundColor: '#d1fae5', paddingHorizontal: 8, paddingVertical: 2,
-        borderRadius: 4, marginTop: 8,
+    bodyContainer: {
+        width: 100,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    statusText: { fontSize: 10, color: theme.primary, fontWeight: '500' },
-    grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-    actionCard: {
-        width: '48%', backgroundColor: theme.white,
-        padding: 20, borderRadius: 16, alignItems: 'center', gap: 12,
-        borderLeftWidth: 4,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+    bodySilhouette: {
+        width: 80,
+        height: 120,
+        backgroundColor: 'rgba(20, 184, 166, 0.2)',
+        borderRadius: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(20, 184, 166, 0.4)',
     },
-    actionIcon: { fontSize: 32 },
-    actionTitle: { fontSize: 14, fontWeight: '600', color: theme.darkNavy, textAlign: 'center' },
-    appointmentCard: {
-        backgroundColor: theme.white, borderRadius: 16,
-        flexDirection: 'row', overflow: 'hidden',
-        shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+    bodyEmoji: {
+        fontSize: 48,
     },
-    appointmentLeft: { backgroundColor: theme.primary, padding: 16, justifyContent: 'center' },
-    dateBox: { alignItems: 'center' },
-    dateDay: { fontSize: 28, fontWeight: 'bold', color: theme.white },
-    dateMonth: { fontSize: 14, color: 'rgba(255,255,255,0.8)' },
-    appointmentRight: { flex: 1, padding: 16 },
-    appointmentTime: { fontSize: 14, color: theme.primary, fontWeight: '600', marginBottom: 4 },
-    appointmentDoctor: { fontSize: 18, fontWeight: '600', color: theme.darkNavy },
-    appointmentDept: { fontSize: 14, color: theme.gray, marginTop: 2 },
-    appointmentActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
-    rescheduleBtn: {
-        paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8,
-        borderWidth: 1, borderColor: theme.gray,
+    metricsContainer: {
+        flex: 1,
+        paddingLeft: 16,
     },
-    rescheduleBtnText: { fontSize: 12, color: theme.gray },
-    joinBtn: {
-        paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8,
-        backgroundColor: theme.primary,
+    metricRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
     },
-    joinBtnText: { fontSize: 12, color: theme.white, fontWeight: '500' },
-    activityCard: {
-        backgroundColor: theme.white, borderRadius: 12,
-        flexDirection: 'row', alignItems: 'center',
-        padding: 16, marginBottom: 10,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.03, shadowRadius: 4, elevation: 1,
+    metricIcon: {
+        fontSize: 24,
+        marginRight: 12,
     },
-    activityIcon: {
-        width: 44, height: 44, borderRadius: 12,
-        backgroundColor: theme.lightCream,
-        justifyContent: 'center', alignItems: 'center',
+    metricInfo: {
+        flex: 1,
     },
-    activityEmoji: { fontSize: 20 },
-    activityInfo: { flex: 1, marginLeft: 12 },
-    activityTitle: { fontSize: 15, fontWeight: '500', color: theme.darkNavy },
-    activityDate: { fontSize: 13, color: theme.gray, marginTop: 2 },
-    activityStatus: {
-        paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6,
+    metricLabel: {
+        fontSize: 12,
+        color: theme.textMuted,
+        marginBottom: 2,
     },
-    statusCompleted: { backgroundColor: '#d1fae5' },
-    statusReady: { backgroundColor: '#dbeafe' },
-    statusActive: { backgroundColor: '#fef3c7' },
-    activityStatusText: { fontSize: 11, fontWeight: '500', color: theme.darkNavy, textTransform: 'capitalize' },
+    metricValueRow: {
+        flexDirection: 'row',
+        alignItems: 'baseline',
+    },
+    metricValue: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        color: theme.white,
+    },
+    metricUnit: {
+        fontSize: 12,
+        color: theme.textSecondary,
+        marginLeft: 4,
+    },
+    
+    // Section Title
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: theme.white,
+        paddingHorizontal: 20,
+        marginTop: 8,
+        marginBottom: 16,
+    },
+    
+    // Insights Row
+    insightsRow: {
+        flexDirection: 'row',
+        paddingHorizontal: 12,
+    },
+    insightCard: {
+        flex: 1,
+        marginHorizontal: 8,
+        padding: 16,
+    },
+    insightHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    insightIcon: {
+        fontSize: 16,
+        marginRight: 8,
+    },
+    insightTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.textPrimary,
+    },
+    trendLine: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    trendDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+    },
+    trendPath: {
+        flex: 1,
+        height: 2,
+        backgroundColor: 'rgba(20, 184, 166, 0.3)',
+        marginLeft: 8,
+    },
+    predictionLabel: {
+        fontSize: 12,
+        color: theme.textSecondary,
+        marginBottom: 4,
+    },
+    predictionValue: {
+        color: theme.primary,
+        fontWeight: '600',
+    },
+    predictionMessage: {
+        fontSize: 11,
+        color: theme.textMuted,
+        lineHeight: 16,
+    },
+    taskRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    taskIcon: {
+        fontSize: 20,
+        marginRight: 10,
+    },
+    taskInfo: {
+        flex: 1,
+    },
+    taskTitle: {
+        fontSize: 13,
+        color: theme.textPrimary,
+        fontWeight: '500',
+    },
+    taskNote: {
+        fontSize: 11,
+        color: theme.textMuted,
+    },
+    
+    // Chart Card
+    chartCard: {
+        marginTop: 8,
+    },
+    chartHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    filterBtn: {
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
+    },
+    filterText: {
+        fontSize: 12,
+        color: theme.textSecondary,
+    },
+    chartLegend: {
+        flexDirection: 'row',
+        marginBottom: 16,
+    },
+    legendItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginRight: 16,
+    },
+    legendDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        marginRight: 6,
+    },
+    legendText: {
+        fontSize: 11,
+        color: theme.textSecondary,
+    },
+    chartArea: {
+        height: 80,
+        backgroundColor: 'rgba(255,255,255,0.03)',
+        borderRadius: 12,
+        overflow: 'hidden',
+    },
 });

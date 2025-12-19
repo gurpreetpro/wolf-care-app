@@ -1,324 +1,507 @@
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput, ActivityIndicator } from 'react-native';
-import { useState, useEffect } from 'react';
-import { router } from 'expo-router';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
+import { useState, useEffect, useCallback } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Circle, Line } from 'react-native-svg';
+import { getDoctors, checkApiHealth, getPatientAppointments } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
+import BookingModal from '../components/BookingModal';
 
-// Wolf HMS Theme
+// Premium Aurora Neural Theme
 const theme = {
-    primary: '#10B981',
-    darkNavy: '#0f172a',
-    tealDark: '#0d3d56',
-    lightCream: '#f0f9ff',
+    gradientStart: '#0f172a',
+    gradientMid: '#1e293b',
+    gradientEnd: '#0f172a',
+    primary: '#14b8a6',
+    secondary: '#8b5cf6',
+    accent: '#f472b6',
+    cyan: '#06b6d4',
     white: '#ffffff',
-    gray: '#94a3b8',
+    textPrimary: '#f8fafc',
+    textSecondary: 'rgba(255,255,255,0.7)',
+    textMuted: 'rgba(255,255,255,0.5)',
+    glassBackground: 'rgba(255,255,255,0.08)',
+    glassBorder: 'rgba(255,255,255,0.15)',
+    success: '#10b981',
     warning: '#f59e0b',
     error: '#ef4444',
-    info: '#3b82f6',
 };
 
-// Default time slots (can be enhanced to fetch per doctor)
-const defaultTimeSlots = ['9:00 AM', '10:00 AM', '11:00 AM', '2:00 PM', '3:00 PM', '4:00 PM'];
+// Neural Background
+const NeuralBackground = () => (
+    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+        <Circle cx="60" cy="100" r="3" fill={theme.cyan} opacity={0.4} />
+        <Circle cx="320" cy="150" r="4" fill={theme.accent} opacity={0.3} />
+        <Circle cx="40" cy="400" r="2" fill={theme.primary} opacity={0.5} />
+        <Line x1="60" y1="100" x2="320" y2="150" stroke={theme.cyan} strokeWidth="0.5" opacity={0.2} />
+    </Svg>
+);
 
-const upcomingAppointments = [
-    { id: 1, doctor: 'Dr. Priya Sharma', dept: 'Cardiology', date: 'Dec 15, 2024', time: '10:00 AM', status: 'confirmed' },
-];
+// Glass Card Component
+const GlassCard = ({ children, style, onPress }) => (
+    <Pressable style={[styles.glassCard, style]} onPress={onPress} disabled={!onPress}>
+        {children}
+    </Pressable>
+);
 
 export default function AppointmentsScreen() {
+    const { patient } = useAuth();
+    const [searchQuery, setSearchQuery] = useState('');
     const [doctors, setDoctors] = useState([]);
+    const [appointments, setAppointments] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [showBooking, setShowBooking] = useState(false);
+    const [error, setError] = useState(null);
+    const [apiConnected, setApiConnected] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+    
+    // Booking Modal State
+    const [modalVisible, setModalVisible] = useState(false);
     const [selectedDoctor, setSelectedDoctor] = useState(null);
-    const [selectedSlot, setSelectedSlot] = useState(null);
-    const [selectedDate, setSelectedDate] = useState('Dec 16, 2024');
-    const [consultationType, setConsultationType] = useState('in-person'); // 'in-person' | 'tele'
 
-    // Fetch doctors from Wolf HMS API
     useEffect(() => {
-        fetchDoctors();
-    }, []);
+        loadData();
+    }, [patient]);
 
-    const fetchDoctors = async () => {
-        try {
-            const response = await fetch('http://localhost:5000/api/patients/app/doctors');
-            const data = await response.json();
-            if (data.success && data.doctors) {
-                // Map API response to expected format
-                const formattedDoctors = data.doctors.map(d => ({
-                    id: d.id,
-                    name: d.name,
-                    dept: d.department || 'General',
-                    rating: 4.5 + Math.random() * 0.5, // Random rating for now
-                    fee: d.fee || 500,
-                    available: defaultTimeSlots,
-                }));
-                setDoctors(formattedDoctors);
-            }
-        } catch (error) {
-            console.error('Failed to fetch doctors:', error);
-            // Fallback to mock data if API fails
-            setDoctors([
-                { id: 1, name: 'Dr. Demo', dept: 'General', rating: 4.5, fee: 500, available: defaultTimeSlots },
-            ]);
-        } finally {
+    const loadData = async () => {
+        setLoading(true);
+        setError(null);
+        
+        // 1. Check API Health
+        const healthCheck = await checkApiHealth();
+        setApiConnected(healthCheck.success);
+        
+        if (!healthCheck.success) {
+            setError('Cannot connect to Wolf HMS server');
             setLoading(false);
-        }
-    };
-
-    const handleBook = (doctor) => {
-        setSelectedDoctor(doctor);
-        setShowBooking(true);
-    };
-
-    const confirmBooking = () => {
-        if (!selectedSlot) {
-            alert('Please select a time slot');
             return;
         }
-        setShowBooking(false);
-        // Navigate to payment with booking details
-        router.push({
-            pathname: '/payment/checkout',
-            params: {
-                type: 'appointment',
-                doctor: selectedDoctor.name,
-                doctorId: selectedDoctor.id,
-                dept: selectedDoctor.dept,
-                date: selectedDate,
-                time: selectedSlot,
-                amount: selectedDoctor.fee,
-                consultationType: consultationType, // 'in-person' or 'tele'
+        
+        // 2. Load Doctors
+        const docResult = await getDoctors();
+        if (docResult.success) {
+            setDoctors(docResult.data || []);
+        }
+
+        // 3. Load My Appointments
+        if (patient?.phone) {
+            const aptResult = await getPatientAppointments(patient.phone);
+            if (aptResult.success) {
+                setAppointments(aptResult.data || []);
             }
-        });
+        }
+        
+        setLoading(false);
+        setRefreshing(false);
     };
+
+    const handleRefresh = useCallback(() => {
+        setRefreshing(true);
+        loadData();
+    }, []);
+
+    const handleBookPress = (doctor) => {
+        setSelectedDoctor(doctor);
+        setModalVisible(true);
+    };
+
+    const handleBookingSuccess = () => {
+        loadData(); // Refresh list after booking
+    };
+
+    const getStatusColor = (status) => {
+        switch (status?.toLowerCase()) {
+            case 'confirmed': return theme.success;
+            case 'completed': return theme.secondary;
+            case 'cancelled': return theme.error;
+            case 'pending': return theme.warning;
+            default: return theme.textMuted;
+        }
+    };
+
+    // Filter doctors based on search
+    const filteredDoctors = doctors.filter(doctor => 
+        doctor.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        doctor.specialty?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        doctor.department?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     return (
         <View style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <Text style={styles.title}>Appointments</Text>
-                <Text style={styles.subtitle}>Book or manage your appointments</Text>
-            </View>
+            <LinearGradient
+                colors={[theme.gradientStart, theme.gradientMid, theme.gradientEnd]}
+                style={StyleSheet.absoluteFill}
+            />
+            <NeuralBackground />
+            
+            {/* Booking Modal */}
+            <BookingModal 
+                visible={modalVisible}
+                doctor={selectedDoctor}
+                patientPhone={patient?.phone}
+                onClose={() => setModalVisible(false)}
+                onSuccess={handleBookingSuccess}
+            />
 
-            <ScrollView style={styles.content}>
-                {/* Upcoming */}
-                {upcomingAppointments.length > 0 && (
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Upcoming</Text>
-                        {upcomingAppointments.map((apt) => (
-                            <View key={apt.id} style={styles.upcomingCard}>
-                                <View style={styles.upcomingLeft}>
-                                    <Text style={styles.upcomingDoctor}>{apt.doctor}</Text>
-                                    <Text style={styles.upcomingDept}>{apt.dept}</Text>
-                                    <Text style={styles.upcomingTime}>{apt.date} • {apt.time}</Text>
-                                </View>
-                                <View style={[styles.statusBadge, apt.status === 'confirmed' && styles.statusConfirmed]}>
-                                    <Text style={styles.statusText}>{apt.status}</Text>
-                                </View>
-                            </View>
-                        ))}
+            <ScrollView 
+                contentContainerStyle={styles.scrollContent} 
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primary} />
+                }
+            >
+                {/* Header */}
+                <View style={styles.header}>
+                    <Text style={styles.headerTitle}>Appointments</Text>
+                    <Text style={styles.headerSubtitle}>Book or manage your appointments</Text>
+                    
+                    {/* API Status Indicator */}
+                    <View style={[styles.apiStatus, { backgroundColor: apiConnected ? `${theme.success}30` : `${theme.error}30` }]}>
+                        <View style={[styles.apiDot, { backgroundColor: apiConnected ? theme.success : theme.error }]} />
+                        <Text style={[styles.apiText, { color: apiConnected ? theme.success : theme.error }]}>
+                            {apiConnected ? 'Connected to Wolf HMS' : 'Offline Mode'}
+                        </Text>
                     </View>
+                </View>
+
+                {/* Search Bar */}
+                <GlassCard style={styles.searchCard}>
+                    <Text style={styles.searchIcon}>🔍</Text>
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search doctors, specialties..."
+                        placeholderTextColor={theme.textMuted}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
+                </GlassCard>
+
+                {/* My Appointments Section */}
+                {appointments.length > 0 && (
+                    <>
+                        <Text style={styles.sectionTitle}>My Appointments</Text>
+                        {appointments.map((apt) => (
+                            <GlassCard key={apt.id} style={styles.appointmentCard}>
+                                <View style={styles.appointmentHeader}>
+                                    <View style={styles.appointmentInfo}>
+                                        <Text style={styles.doctorName}>{apt.doctor_name || 'Dr. Unknown'}</Text>
+                                        <Text style={styles.specialty}>{apt.department || 'General'}</Text>
+                                    </View>
+                                    <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(apt.status)}20` }]}>
+                                        <Text style={[styles.statusText, { color: getStatusColor(apt.status) }]}>
+                                            {apt.status || 'Pending'}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <View style={styles.appointmentDetails}>
+                                    <View style={styles.detailItem}>
+                                        <Text style={styles.detailIcon}>📅</Text>
+                                        <Text style={styles.detailText}>{apt.date ? new Date(apt.date).toLocaleDateString() : 'TBD'}</Text>
+                                    </View>
+                                    <View style={styles.detailItem}>
+                                        <Text style={styles.detailIcon}>⏰</Text>
+                                        <Text style={styles.detailText}>{apt.time || 'TBD'}</Text>
+                                    </View>
+                                    <View style={styles.detailItem}>
+                                        <Text style={styles.detailIcon}>🏥</Text>
+                                        <Text style={styles.detailText}>{apt.type || 'In-Person'}</Text>
+                                    </View>
+                                </View>
+                            </GlassCard>
+                        ))}
+                    </>
                 )}
 
-                {/* Book New */}
-                <View style={styles.section}>
+                {/* Book Appointment Section */}
+                <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>
-                        Book Appointment {doctors.length > 0 && `(${doctors.length} doctors)`}
+                        Available Doctors
                     </Text>
-                    {loading ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color={theme.primary} />
-                            <Text style={styles.loadingText}>Loading doctors from HMS...</Text>
-                        </View>
-                    ) : doctors.length === 0 ? (
-                        <Text style={styles.noDataText}>No doctors available</Text>
-                    ) : (
-                    doctors.map((doctor) => (
-                        <View key={doctor.id} style={styles.doctorCard}>
-                            <View style={styles.doctorAvatar}>
-                                <Text style={styles.avatarEmoji}>👨‍⚕️</Text>
-                            </View>
-                            <View style={styles.doctorInfo}>
-                                <Text style={styles.doctorName}>{doctor.name}</Text>
-                                <Text style={styles.doctorDept}>{doctor.dept}</Text>
-                                <View style={styles.doctorMeta}>
-                                    <Text style={styles.rating}>⭐ {doctor.rating}</Text>
-                                    <Text style={styles.fee}>₹{doctor.fee}</Text>
-                                </View>
-                            </View>
-                            <Pressable style={styles.bookBtn} onPress={() => handleBook(doctor)}>
-                                <Text style={styles.bookBtnText}>Book</Text>
-                            </Pressable>
-                        </View>
-                    ))
-                    )}
                 </View>
+
+                {/* Loading State */}
+                {loading && !refreshing && (
+                    <GlassCard style={styles.loadingCard}>
+                        <ActivityIndicator color={theme.primary} size="large" />
+                        <Text style={styles.loadingText}>Loading doctors...</Text>
+                    </GlassCard>
+                )}
+
+                {/* Error State */}
+                {error && !loading && !refreshing && (
+                    <GlassCard style={styles.errorCard}>
+                        <Text style={styles.errorIcon}>⚠️</Text>
+                        <Text style={styles.errorText}>{error}</Text>
+                    </GlassCard>
+                )}
+
+                {/* Doctors List */}
+                {!loading && filteredDoctors.map((doctor) => (
+                    <GlassCard key={doctor.id || doctor.user_id} style={styles.doctorCard}>
+                        <View style={styles.doctorAvatar}>
+                            <Text style={styles.doctorEmoji}>
+                                {doctor.gender === 'female' ? '👩‍⚕️' : '👨‍⚕️'}
+                            </Text>
+                        </View>
+                        <View style={styles.doctorInfo}>
+                            <Text style={styles.doctorName}>
+                                {doctor.name || `Dr. ${doctor.first_name || ''} ${doctor.last_name || ''}`.trim()}
+                            </Text>
+                            <Text style={styles.doctorSpecialty}>
+                                {doctor.specialty || doctor.department || 'General'}
+                            </Text>
+                            <View style={styles.doctorMeta}>
+                                <Text style={styles.rating}>⭐ {doctor.rating || '4.5'}</Text>
+                                <Text style={styles.fee}>₹{doctor.consultation_fee || doctor.fee || '500'}</Text>
+                            </View>
+                        </View>
+                        <Pressable 
+                            style={styles.bookBtn}
+                            onPress={() => handleBookPress(doctor)}
+                        >
+                            <LinearGradient
+                                colors={[theme.primary, theme.cyan]}
+                                style={styles.bookGradient}
+                            >
+                                <Text style={styles.bookText}>Book</Text>
+                            </LinearGradient>
+                        </Pressable>
+                    </GlassCard>
+                ))}
+
+                {/* No Results */}
+                {!loading && filteredDoctors.length === 0 && (
+                    <GlassCard style={styles.emptyCard}>
+                        <Text style={styles.emptyIcon}>🔍</Text>
+                        <Text style={styles.emptyText}>No doctors found</Text>
+                    </GlassCard>
+                )}
+
+                <View style={{ height: 100 }} />
             </ScrollView>
-
-            {/* Booking Modal */}
-            <Modal visible={showBooking} animationType="slide" transparent>
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Book Appointment</Text>
-                        
-                        {selectedDoctor && (
-                            <>
-                                <View style={styles.selectedDoctorCard}>
-                                    <Text style={styles.selectedDoctorName}>{selectedDoctor.name}</Text>
-                                    <Text style={styles.selectedDoctorDept}>{selectedDoctor.dept} • ₹{selectedDoctor.fee}</Text>
-                                </View>
-
-                                <Text style={styles.dateLabel}>Date: {selectedDate}</Text>
-
-                                {/* Consultation Type Toggle */}
-                                <Text style={styles.slotLabel}>Consultation Type</Text>
-                                <View style={styles.consultTypeContainer}>
-                                    <Pressable 
-                                        style={[styles.consultTypeBtn, consultationType === 'in-person' && styles.consultTypeBtnActive]}
-                                        onPress={() => setConsultationType('in-person')}
-                                    >
-                                        <Text style={styles.consultTypeIcon}>🏥</Text>
-                                        <Text style={[styles.consultTypeText, consultationType === 'in-person' && styles.consultTypeTextActive]}>In-Person</Text>
-                                    </Pressable>
-                                    <Pressable 
-                                        style={[styles.consultTypeBtn, consultationType === 'tele' && styles.consultTypeBtnActive]}
-                                        onPress={() => setConsultationType('tele')}
-                                    >
-                                        <Text style={styles.consultTypeIcon}>📹</Text>
-                                        <Text style={[styles.consultTypeText, consultationType === 'tele' && styles.consultTypeTextActive]}>Video Call</Text>
-                                    </Pressable>
-                                </View>
-
-                                <Text style={styles.slotLabel}>Select Time Slot</Text>
-                                <View style={styles.slotsContainer}>
-                                    {selectedDoctor.available.map((slot) => (
-                                        <Pressable 
-                                            key={slot} 
-                                            style={[styles.slotBtn, selectedSlot === slot && styles.slotBtnSelected]}
-                                            onPress={() => setSelectedSlot(slot)}
-                                        >
-                                            <Text style={[styles.slotText, selectedSlot === slot && styles.slotTextSelected]}>
-                                                {slot}
-                                            </Text>
-                                        </Pressable>
-                                    ))}
-                                </View>
-
-                                <View style={styles.modalActions}>
-                                    <Pressable style={styles.cancelBtn} onPress={() => setShowBooking(false)}>
-                                        <Text style={styles.cancelBtnText}>Cancel</Text>
-                                    </Pressable>
-                                    <Pressable style={styles.confirmBtn} onPress={confirmBooking}>
-                                        <Text style={styles.confirmBtnText}>Proceed to Pay</Text>
-                                    </Pressable>
-                                </View>
-                            </>
-                        )}
-                    </View>
-                </View>
-            </Modal>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: theme.lightCream },
-    header: { backgroundColor: theme.tealDark, padding: 24, paddingTop: 60 },
-    title: { fontSize: 28, fontWeight: 'bold', color: theme.white },
-    subtitle: { fontSize: 14, color: theme.gray, marginTop: 4 },
-    content: { flex: 1 },
-    section: { padding: 20 },
-    sectionTitle: { fontSize: 18, fontWeight: '600', color: theme.darkNavy, marginBottom: 16 },
-    upcomingCard: {
-        backgroundColor: theme.white, borderRadius: 12, padding: 16,
-        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        borderLeftWidth: 4, borderLeftColor: theme.primary,
+    container: {
+        flex: 1,
+        backgroundColor: theme.gradientStart,
     },
-    upcomingLeft: {},
-    upcomingDoctor: { fontSize: 16, fontWeight: '600', color: theme.darkNavy },
-    upcomingDept: { fontSize: 14, color: theme.gray },
-    upcomingTime: { fontSize: 13, color: theme.primary, marginTop: 4 },
-    statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-    statusConfirmed: { backgroundColor: '#d1fae5' },
-    statusText: { fontSize: 12, color: theme.primary, fontWeight: '500', textTransform: 'capitalize' },
+    scrollContent: {
+        paddingTop: 60,
+    },
+    header: {
+        paddingHorizontal: 20,
+        paddingBottom: 20,
+    },
+    headerTitle: {
+        fontSize: 28,
+        fontWeight: 'bold',
+        color: theme.white,
+    },
+    headerSubtitle: {
+        fontSize: 14,
+        color: theme.textSecondary,
+        marginTop: 4,
+    },
+    apiStatus: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+        alignSelf: 'flex-start',
+    },
+    apiDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        marginRight: 8,
+    },
+    apiText: {
+        fontSize: 12,
+        fontWeight: '500',
+    },
+    glassCard: {
+        backgroundColor: theme.glassBackground,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: theme.glassBorder,
+        overflow: 'hidden',
+    },
+    searchCard: {
+        marginHorizontal: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        marginBottom: 24,
+    },
+    searchIcon: {
+        fontSize: 18,
+        marginRight: 12,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 16,
+        color: theme.white,
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        marginBottom: 16,
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: theme.white,
+        paddingHorizontal: 20,
+        marginBottom: 16,
+    },
+    appointmentCard: {
+        marginHorizontal: 20,
+        padding: 16,
+        marginBottom: 12,
+    },
+    appointmentHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 12,
+    },
+    appointmentInfo: {
+        flex: 1,
+    },
+    doctorName: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: theme.white,
+    },
+    specialty: {
+        fontSize: 13,
+        color: theme.textSecondary,
+        marginTop: 2,
+    },
+    statusBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    statusText: {
+        fontSize: 12,
+        fontWeight: '500',
+        textTransform: 'capitalize',
+    },
+    appointmentDetails: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        marginBottom: 12,
+        gap: 16,
+    },
+    detailItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    detailIcon: {
+        fontSize: 14,
+        marginRight: 6,
+    },
+    detailText: {
+        fontSize: 13,
+        color: theme.textSecondary,
+    },
+    loadingCard: {
+        marginHorizontal: 20,
+        padding: 40,
+        alignItems: 'center',
+    },
+    loadingText: {
+        marginTop: 16,
+        fontSize: 14,
+        color: theme.textSecondary,
+    },
+    errorCard: {
+        marginHorizontal: 20,
+        padding: 24,
+        alignItems: 'center',
+    },
+    errorIcon: {
+        fontSize: 32,
+        marginBottom: 12,
+    },
+    errorText: {
+        fontSize: 14,
+        color: theme.error,
+        textAlign: 'center',
+        marginBottom: 16,
+    },
     doctorCard: {
-        backgroundColor: theme.white, borderRadius: 12, padding: 16,
-        flexDirection: 'row', alignItems: 'center', marginBottom: 12,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.03, shadowRadius: 4, elevation: 1,
+        marginHorizontal: 20,
+        padding: 16,
+        marginBottom: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     doctorAvatar: {
-        width: 56, height: 56, borderRadius: 28, backgroundColor: '#e0f2fe',
-        justifyContent: 'center', alignItems: 'center',
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
     },
-    avatarEmoji: { fontSize: 28 },
-    doctorInfo: { flex: 1, marginLeft: 12 },
-    doctorName: { fontSize: 16, fontWeight: '600', color: theme.darkNavy },
-    doctorDept: { fontSize: 14, color: theme.gray },
-    doctorMeta: { flexDirection: 'row', gap: 12, marginTop: 4 },
-    rating: { fontSize: 13, color: theme.warning },
-    fee: { fontSize: 13, color: theme.primary, fontWeight: '600' },
+    doctorEmoji: {
+        fontSize: 28,
+    },
+    doctorInfo: {
+        flex: 1,
+    },
+    doctorSpecialty: {
+        fontSize: 13,
+        color: theme.textSecondary,
+    },
+    doctorMeta: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 4,
+    },
+    rating: {
+        fontSize: 12,
+        color: theme.warning,
+    },
+    fee: {
+        fontSize: 12,
+        color: theme.primary,
+        fontWeight: '600',
+    },
     bookBtn: {
-        backgroundColor: theme.primary, paddingHorizontal: 16, paddingVertical: 10,
-        borderRadius: 8,
+        borderRadius: 10,
+        overflow: 'hidden',
     },
-    bookBtnText: { color: theme.white, fontWeight: '600', fontSize: 14 },
-    modalOverlay: {
-        flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'flex-end',
+    bookGradient: {
+        paddingVertical: 10,
+        paddingHorizontal: 20,
     },
-    modalContent: {
-        backgroundColor: theme.white, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-        padding: 24, maxHeight: '70%',
+    bookText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.white,
     },
-    modalTitle: { fontSize: 22, fontWeight: 'bold', color: theme.darkNavy, marginBottom: 20 },
-    selectedDoctorCard: {
-        backgroundColor: theme.lightCream, padding: 16, borderRadius: 12, marginBottom: 20,
+    emptyCard: {
+        marginHorizontal: 20,
+        padding: 40,
+        alignItems: 'center',
     },
-    selectedDoctorName: { fontSize: 18, fontWeight: '600', color: theme.darkNavy },
-    selectedDoctorDept: { fontSize: 14, color: theme.gray, marginTop: 4 },
-    dateLabel: { fontSize: 14, color: theme.gray, marginBottom: 16 },
-    slotLabel: { fontSize: 16, fontWeight: '600', color: theme.darkNavy, marginBottom: 12 },
-    slotsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 },
-    slotBtn: {
-        paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8,
-        borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: theme.white,
+    emptyIcon: {
+        fontSize: 40,
+        marginBottom: 12,
+        opacity: 0.5,
     },
-    slotBtnSelected: { backgroundColor: theme.primary, borderColor: theme.primary },
-    slotText: { fontSize: 14, color: theme.darkNavy },
-    slotTextSelected: { color: theme.white, fontWeight: '600' },
-    modalActions: { flexDirection: 'row', gap: 12 },
-    cancelBtn: {
-        flex: 1, paddingVertical: 14, borderRadius: 12,
-        borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center',
-    },
-    cancelBtnText: { fontSize: 16, color: theme.gray },
-    confirmBtn: {
-        flex: 1, paddingVertical: 14, borderRadius: 12,
-        backgroundColor: theme.primary, alignItems: 'center',
-    },
-    confirmBtnText: { fontSize: 16, color: theme.white, fontWeight: '600' },
-    // Consultation Type Toggle Styles
-    consultTypeContainer: { 
-        flexDirection: 'row', gap: 12, marginBottom: 20,
-    },
-    consultTypeBtn: {
-        flex: 1, paddingVertical: 16, borderRadius: 12,
-        borderWidth: 2, borderColor: '#e2e8f0', alignItems: 'center',
-        backgroundColor: theme.white,
-    },
-    consultTypeBtnActive: { 
-        borderColor: theme.primary, backgroundColor: '#f0fdf4',
-    },
-    consultTypeIcon: { fontSize: 28, marginBottom: 4 },
-    consultTypeText: { fontSize: 14, color: theme.gray, fontWeight: '500' },
-    consultTypeTextActive: { color: theme.primary, fontWeight: '600' },
-    // Loading indicator styles
-    loadingContainer: {
-        padding: 40, alignItems: 'center',
-    },
-    loadingText: { 
-        fontSize: 14, color: theme.gray, marginTop: 12,
-    },
-    noDataText: { 
-        fontSize: 14, color: theme.gray, padding: 20, textAlign: 'center',
+    emptyText: {
+        fontSize: 14,
+        color: theme.textMuted,
     },
 });

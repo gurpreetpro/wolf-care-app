@@ -1,348 +1,255 @@
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
-import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { useState, useEffect, useCallback } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { useAuth } from '../../contexts/AuthContext';
+import { getPatientLabOrders, getPatientPrescriptions, getPharmacyOrders } from '../../services/api';
 
-// Wolf HMS Theme
+// Premium Aurora Neural Theme
 const theme = {
-    primary: '#10B981',
-    darkNavy: '#0f172a',
-    tealDark: '#0d3d56',
-    lightCream: '#f0f9ff',
+    gradientStart: '#0f172a',
+    gradientMid: '#1e293b',
+    gradientEnd: '#0f172a',
+    primary: '#14b8a6',
+    secondary: '#8b5cf6',
+    accent: '#f472b6',
+    cyan: '#06b6d4',
     white: '#ffffff',
-    gray: '#94a3b8',
+    textPrimary: '#f8fafc',
+    textSecondary: 'rgba(255,255,255,0.7)',
+    textMuted: 'rgba(255,255,255,0.5)',
+    glassBackground: 'rgba(255,255,255,0.08)',
+    glassBorder: 'rgba(255,255,255,0.15)',
+    success: '#10b981',
     warning: '#f59e0b',
     error: '#ef4444',
-    info: '#3b82f6',
-    criticalBg: '#fef2f2',
-    criticalBorder: '#dc2626',
 };
 
-const prescriptions = [
-    {
-        id: 1,
-        doctor: 'Dr. Priya Sharma',
-        date: 'Dec 10, 2024',
-        status: 'active',
-        medicines: [
-            { name: 'Atorvastatin 10mg', dosage: 'Once daily at bedtime', duration: '30 days' },
-            { name: 'Aspirin 75mg', dosage: 'Once daily after breakfast', duration: '30 days' },
-        ]
-    },
-];
+// Neural Background
+const NeuralBackground = () => (
+    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+        <Circle cx="70" cy="80" r="3" fill={theme.cyan} opacity={0.4} />
+        <Circle cx="340" cy="120" r="4" fill={theme.accent} opacity={0.3} />
+        <Circle cx="30" cy="350" r="2" fill={theme.primary} opacity={0.5} />
+        <Line x1="70" y1="80" x2="340" y2="120" stroke={theme.cyan} strokeWidth="0.5" opacity={0.2} />
+    </Svg>
+);
+
+// Glass Card Component
+const GlassCard = ({ children, style, onPress }) => (
+    <Pressable style={[styles.glassCard, style]} onPress={onPress} disabled={!onPress}>
+        {children}
+    </Pressable>
+);
+
+// Tab Component
+const TabButton = ({ title, icon, active, onPress }) => (
+    <Pressable 
+        style={[styles.tab, active && styles.tabActive]} 
+        onPress={onPress}
+    >
+        <Text style={styles.tabIcon}>{icon}</Text>
+        <Text style={[styles.tabText, active && styles.tabTextActive]}>{title}</Text>
+    </Pressable>
+);
 
 export default function RecordsScreen() {
-    const [activeTab, setActiveTab] = useState('labs');
-    const [expandedLab, setExpandedLab] = useState(null);
+    const { patient } = useAuth();
+    const [activeTab, setActiveTab] = useState('lab');
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+
     const [labResults, setLabResults] = useState([]);
     const [medications, setMedications] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [medsLoading, setMedsLoading] = useState(true);
-    const [selectedResult, setSelectedResult] = useState(null);
+    const [prescriptions, setPrescriptions] = useState([]);
 
-    // TODO: Get this from user session
-    const patientPhone = '7777777777';
-
-    useEffect(() => {
-        fetchLabOrders();
-        fetchMedications();
-    }, []);
-
-    const fetchLabOrders = async () => {
+    const loadData = async () => {
+        if (!patient?.phone) return;
+        
+        setLoading(true);
         try {
-            const response = await fetch(`http://localhost:5000/api/patients/app/lab-orders?phone=${patientPhone}`);
-            const data = await response.json();
-            
-            if (data.success && data.labOrders) {
-                setLabResults(data.labOrders);
-            }
+            // Load all data in parallel
+            const [labRes, rxRes, medRes] = await Promise.all([
+                getPatientLabOrders(patient.phone),
+                getPatientPrescriptions(patient.phone),
+                getPharmacyOrders(patient.phone)
+            ]);
+
+            if (labRes.success) setLabResults(labRes.data || []);
+            if (rxRes.success) setPrescriptions(rxRes.data || []);
+            // Using pharmacy orders as proxy for active medications if needed, 
+            // or just mock active meds from prescriptions if backend doesn't support "active meds" specifically yet.
+            // For now, let's use pharmacy orders or prescriptions to derive medications.
+            if (medRes.success) setMedications(medRes.data || []);
+
         } catch (error) {
-            console.error('Failed to fetch lab orders:', error);
-            setLabResults([]);
+            console.error('Failed to load records:', error);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     };
 
-    const fetchMedications = async () => {
-        try {
-            const response = await fetch(`http://localhost:5000/api/patients/app/medications?phone=${patientPhone}`);
-            const data = await response.json();
-            
-            if (data.success && data.medications) {
-                setMedications(data.medications);
-            }
-        } catch (error) {
-            console.error('Failed to fetch medications:', error);
-            setMedications([]);
-        } finally {
-            setMedsLoading(false);
-        }
-    };
+    useEffect(() => {
+        loadData();
+    }, [patient]);
 
-    const fetchLabResult = async (requestId) => {
-        try {
-            const response = await fetch(`http://localhost:5000/api/patients/app/lab-results/${requestId}`);
-            const data = await response.json();
-            
-            if (data.success) {
-                setSelectedResult(data);
-                setExpandedLab(requestId);
-            }
-        } catch (error) {
-            console.error('Failed to fetch lab result:', error);
-            Alert.alert('Error', 'Failed to load lab results');
-        }
-    };
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        loadData();
+    }, []);
 
-    const handleLabPress = (lab) => {
-        if (expandedLab === lab.id) {
-            setExpandedLab(null);
-            setSelectedResult(null);
-        } else if (lab.has_results) {
-            fetchLabResult(lab.id);
-        } else {
-            setExpandedLab(lab.id);
-        }
-    };
+    const tabs = [
+        { id: 'lab', title: 'Lab Results', icon: '🧪' },
+        { id: 'medications', title: 'Medications', icon: '💊' },
+        { id: 'prescriptions', title: 'Rx', icon: '📝' },
+    ];
 
-    const getStatusBadge = (status, hasCritical) => {
-        if (hasCritical) {
-            return { bg: theme.criticalBg, text: '⚠️ Critical', color: theme.error };
-        }
+    const getStatusStyle = (status) => {
         switch (status?.toLowerCase()) {
-            case 'completed':
-                return { bg: '#d1fae5', text: '✓ Ready', color: theme.primary };
+            case 'ready':
+            case 'completed': 
+            case 'delivered':
+                return { bg: `${theme.success}20`, color: theme.success };
+            case 'active': 
             case 'processing':
-                return { bg: '#fef3c7', text: '🔄 Processing', color: theme.warning };
-            case 'collected':
-                return { bg: '#dbeafe', text: '📦 Collected', color: theme.info };
-            default:
-                return { bg: '#f1f5f9', text: '⏳ Pending', color: theme.gray };
+                return { bg: `${theme.primary}20`, color: theme.primary };
+            case 'pending': 
+                return { bg: `${theme.warning}20`, color: theme.warning };
+            default: return { bg: theme.glassBackground, color: theme.textMuted };
         }
     };
 
-    const getValueStatus = (param) => {
-        if (param.status === 'low') return { color: theme.warning, icon: '↓' };
-        if (param.status === 'high' || param.status === 'critical') return { color: theme.error, icon: '↑' };
-        return { color: theme.primary, icon: '' };
-    };
+    const renderLabResults = () => (
+        <View style={styles.content}>
+            {labResults.length > 0 ? labResults.map((result) => (
+                <GlassCard key={result.id || result.order_id} style={styles.recordCard}>
+                    <View style={styles.recordIcon}>
+                        <Text style={styles.recordEmoji}>🧪</Text>
+                    </View>
+                    <View style={styles.recordInfo}>
+                        <Text style={styles.recordName}>{result.test_name || result.testName || 'Lab Test'}</Text>
+                        <Text style={styles.recordDate}>{result.date ? new Date(result.date).toLocaleDateString() : 'Date TBD'}</Text>
+                    </View>
+                    <View style={styles.recordMeta}>
+                        <View style={[styles.statusBadge, { backgroundColor: getStatusStyle(result.status).bg }]}>
+                            <Text style={[styles.statusText, { color: getStatusStyle(result.status).color }]}>
+                                {result.status || 'Pending'}
+                            </Text>
+                        </View>
+                    </View>
+                </GlassCard>
+            )) : (
+                <GlassCard style={styles.emptyCard}>
+                    <Text style={styles.emptyIcon}>🧪</Text>
+                    <Text style={styles.emptyTitle}>No lab results yet</Text>
+                    <Text style={styles.emptyText}>Your lab reports will appear here</Text>
+                </GlassCard>
+            )}
+        </View>
+    );
 
-    const formatDate = (dateString) => {
-        if (!dateString) return '';
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-    };
+    const renderMedications = () => (
+        <View style={styles.content}>
+            {medications.length > 0 ? medications.map((med) => (
+                <GlassCard key={med.id || med.order_id} style={styles.recordCard}>
+                    <View style={[styles.recordIcon, { backgroundColor: 'rgba(244, 114, 182, 0.2)' }]}>
+                        <Text style={styles.recordEmoji}>💊</Text>
+                    </View>
+                    <View style={styles.recordInfo}>
+                        <Text style={styles.recordName}>{med.medicine_name || med.items?.[0]?.name || 'Medication'}</Text>
+                        <Text style={styles.recordDate}>{med.dosage || 'Dosage via Doctor'}</Text>
+                    </View>
+                    <View style={styles.recordMeta}>
+                        <View style={[styles.statusBadge, { backgroundColor: getStatusStyle(med.status).bg }]}>
+                            <Text style={[styles.statusText, { color: getStatusStyle(med.status).color }]}>
+                                {med.status || 'Active'}
+                            </Text>
+                        </View>
+                    </View>
+                </GlassCard>
+            )) : (
+                <GlassCard style={styles.emptyCard}>
+                    <Text style={styles.emptyIcon}>💊</Text>
+                    <Text style={styles.emptyTitle}>No medications</Text>
+                    <Text style={styles.emptyText}>Active medications will list here</Text>
+                </GlassCard>
+            )}
+        </View>
+    );
+
+    const renderPrescriptions = () => (
+        <View style={styles.content}>
+            {prescriptions.length > 0 ? prescriptions.map((rx) => (
+                <GlassCard key={rx.id || rx._id} style={styles.recordCard}>
+                    <View style={[styles.recordIcon, { backgroundColor: 'rgba(139, 92, 246, 0.2)' }]}>
+                        <Text style={styles.recordEmoji}>📝</Text>
+                    </View>
+                    <View style={styles.recordInfo}>
+                        <Text style={styles.recordName}>{rx.doctor_name || 'Dr. Consult'}</Text>
+                        <Text style={styles.recordDate}>{rx.date ? new Date(rx.date).toLocaleDateString() : 'Recent'}</Text>
+                    </View>
+                    <View style={styles.recordMeta}>
+                        <View style={styles.itemsBadge}>
+                            <Text style={styles.itemsText}>{rx.medicines?.length || 0} items</Text>
+                        </View>
+                        <Text style={styles.viewLink}>View →</Text>
+                    </View>
+                </GlassCard>
+            )) : (
+                 <GlassCard style={styles.emptyCard}>
+                    <Text style={styles.emptyIcon}>📝</Text>
+                    <Text style={styles.emptyTitle}>No prescriptions</Text>
+                    <Text style={styles.emptyText}>Doctor prescriptions appear here</Text>
+                </GlassCard>
+            )}
+        </View>
+    );
 
     return (
         <View style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <Text style={styles.title}>Medical Records</Text>
-                <Text style={styles.subtitle}>Your health history at a glance</Text>
-            </View>
+            <LinearGradient
+                colors={[theme.gradientStart, theme.gradientMid, theme.gradientEnd]}
+                style={StyleSheet.absoluteFill}
+            />
+            <NeuralBackground />
+            
+            <ScrollView 
+                contentContainerStyle={styles.scrollContent} 
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
+                }
+            >
+                {/* Header */}
+                <View style={styles.header}>
+                    <Text style={styles.headerTitle}>Medical Records</Text>
+                    <Text style={styles.headerSubtitle}>Your health history at a glance</Text>
+                    {loading && !refreshing && <ActivityIndicator color={theme.primary} style={{marginTop: 10}} />}
+                </View>
 
-            {/* Tabs */}
-            <View style={styles.tabBar}>
-                <Pressable 
-                    style={[styles.tab, activeTab === 'labs' && styles.tabActive]}
-                    onPress={() => setActiveTab('labs')}
+                {/* Tabs */}
+                <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false} 
+                    style={styles.tabsContainer}
+                    contentContainerStyle={styles.tabsContent}
                 >
-                    <Text style={[styles.tabText, activeTab === 'labs' && styles.tabTextActive]}>
-                        🧪 Lab Results
-                    </Text>
-                </Pressable>
-                <Pressable 
-                    style={[styles.tab, activeTab === 'medications' && styles.tabActive]}
-                    onPress={() => setActiveTab('medications')}
-                >
-                    <Text style={[styles.tabText, activeTab === 'medications' && styles.tabTextActive]}>
-                        💊 Medications
-                    </Text>
-                </Pressable>
-                <Pressable 
-                    style={[styles.tab, activeTab === 'prescriptions' && styles.tabActive]}
-                    onPress={() => setActiveTab('prescriptions')}
-                >
-                    <Text style={[styles.tabText, activeTab === 'prescriptions' && styles.tabTextActive]}>
-                        📋 Rx
-                    </Text>
-                </Pressable>
-            </View>
+                    {tabs.map((tab) => (
+                        <TabButton
+                            key={tab.id}
+                            title={tab.title}
+                            icon={tab.icon}
+                            active={activeTab === tab.id}
+                            onPress={() => setActiveTab(tab.id)}
+                        />
+                    ))}
+                </ScrollView>
 
-            <ScrollView style={styles.content}>
-                {/* Lab Results Tab */}
-                {activeTab === 'labs' && (
-                    <View style={styles.section}>
-                        {loading ? (
-                            <View style={styles.loadingContainer}>
-                                <ActivityIndicator size="large" color={theme.primary} />
-                                <Text style={styles.loadingText}>Loading lab results...</Text>
-                            </View>
-                        ) : labResults.length === 0 ? (
-                            <View style={styles.emptyContainer}>
-                                <Text style={styles.emptyIcon}>🧪</Text>
-                                <Text style={styles.emptyText}>No lab results yet</Text>
-                                <Text style={styles.emptySubtext}>Your lab reports will appear here</Text>
-                            </View>
-                        ) : (
-                            labResults.map((lab) => {
-                                const badge = getStatusBadge(lab.status, lab.has_critical_value);
-                                return (
-                                    <Pressable 
-                                        key={lab.id} 
-                                        style={[
-                                            styles.labCard,
-                                            lab.has_critical_value && styles.criticalCard
-                                        ]}
-                                        onPress={() => handleLabPress(lab)}
-                                    >
-                                        <View style={styles.labHeader}>
-                                            <View style={{ flex: 1 }}>
-                                                <Text style={styles.labName}>{lab.test_name}</Text>
-                                                <Text style={styles.labDate}>
-                                                    {formatDate(lab.requested_at)} • {lab.doctor_name}
-                                                </Text>
-                                            </View>
-                                            <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
-                                                <Text style={[styles.statusText, { color: badge.color }]}>
-                                                    {badge.text}
-                                                </Text>
-                                            </View>
-                                        </View>
-
-                                        {/* Expanded Results */}
-                                        {expandedLab === lab.id && selectedResult?.results?.parameters && (
-                                            <View style={styles.resultsContainer}>
-                                                {selectedResult.results.parameters.map((param, idx) => {
-                                                    const valueStatus = getValueStatus(param);
-                                                    return (
-                                                        <View key={idx} style={styles.resultRow}>
-                                                            <Text style={styles.resultTest}>{param.name}</Text>
-                                                            <View style={styles.resultValues}>
-                                                                <Text style={[styles.resultValue, { color: valueStatus.color }]}>
-                                                                    {valueStatus.icon} {param.value} {param.unit}
-                                                                </Text>
-                                                                <Text style={styles.resultRange}>
-                                                                    Normal: {param.normalMin} - {param.normalMax}
-                                                                </Text>
-                                                            </View>
-                                                        </View>
-                                                    );
-                                                })}
-                                                
-                                                {/* Summary */}
-                                                {selectedResult.results.summary && (
-                                                    <View style={styles.summaryBox}>
-                                                        <Text style={styles.summaryTitle}>📋 Summary</Text>
-                                                        <Text style={styles.summaryText}>
-                                                            {selectedResult.results.summary}
-                                                        </Text>
-                                                    </View>
-                                                )}
-                                            </View>
-                                        )}
-
-                                        {/* Pending/No Results Message */}
-                                        {expandedLab === lab.id && !lab.has_results && (
-                                            <View style={styles.pendingBox}>
-                                                <Text style={styles.pendingText}>
-                                                    ⏳ Results not yet available. Check back later.
-                                                </Text>
-                                            </View>
-                                        )}
-
-                                        <Text style={styles.expandHint}>
-                                            {expandedLab === lab.id ? '▲ Tap to collapse' : '▼ Tap to view details'}
-                                        </Text>
-                                    </Pressable>
-                                );
-                            })
-                        )}
-                    </View>
-                )}
-
-                {/* Medications Tab */}
-                {activeTab === 'medications' && (
-                    <View style={styles.section}>
-                        {medsLoading ? (
-                            <View style={styles.loadingContainer}>
-                                <ActivityIndicator size="large" color={theme.primary} />
-                                <Text style={styles.loadingText}>Loading medications...</Text>
-                            </View>
-                        ) : medications.length === 0 ? (
-                            <View style={styles.emptyContainer}>
-                                <Text style={styles.emptyIcon}>💊</Text>
-                                <Text style={styles.emptyText}>No medications yet</Text>
-                                <Text style={styles.emptySubtext}>Your dispensed medications will appear here</Text>
-                            </View>
-                        ) : (
-                            medications.map((med) => (
-                                <View key={med.id} style={[styles.medCard, med.is_controlled && styles.controlledCard]}>
-                                    <View style={styles.medHeader}>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={styles.medName}>{med.drug_name}</Text>
-                                            {med.generic_name && (
-                                                <Text style={styles.medGeneric}>{med.generic_name}</Text>
-                                            )}
-                                        </View>
-                                        <View style={styles.medQtyBadge}>
-                                            <Text style={styles.medQtyText}>Qty: {med.quantity}</Text>
-                                        </View>
-                                    </View>
-                                    
-                                    {med.dosage_instructions && (
-                                        <View style={styles.dosageBox}>
-                                            <Text style={styles.dosageLabel}>📋 Dosage Instructions</Text>
-                                            <Text style={styles.dosageText}>{med.dosage_instructions}</Text>
-                                        </View>
-                                    )}
-                                    
-                                    <Text style={styles.medDate}>
-                                        Dispensed on {formatDate(med.dispensed_at)}
-                                        {med.dispensed_by_name && ` by ${med.dispensed_by_name}`}
-                                    </Text>
-                                    
-                                    {med.is_controlled && (
-                                        <View style={styles.controlledBadge}>
-                                            <Text style={styles.controlledText}>⚠️ Controlled Substance</Text>
-                                        </View>
-                                    )}
-                                </View>
-                            ))
-                        )}
-                    </View>
-                )}
-
-                {/* Prescriptions Tab */}
-                {activeTab === 'prescriptions' && (
-                    <View style={styles.section}>
-                        {prescriptions.map((rx) => (
-                            <View key={rx.id} style={styles.rxCard}>
-                                <View style={styles.rxHeader}>
-                                    <View>
-                                        <Text style={styles.rxDoctor}>{rx.doctor}</Text>
-                                        <Text style={styles.rxDate}>{rx.date}</Text>
-                                    </View>
-                                    <View style={[
-                                        styles.rxStatus,
-                                        rx.status === 'active' ? styles.rxActive : styles.rxCompleted
-                                    ]}>
-                                        <Text style={styles.rxStatusText}>{rx.status}</Text>
-                                    </View>
-                                </View>
-
-                                <View style={styles.medicineList}>
-                                    {rx.medicines.map((med, idx) => (
-                                        <View key={idx} style={styles.medicineItem}>
-                                            <Text style={styles.medicineName}>💊 {med.name}</Text>
-                                            <Text style={styles.medicineDosage}>{med.dosage}</Text>
-                                            <Text style={styles.medicineDuration}>{med.duration}</Text>
-                                        </View>
-                                    ))}
-                                </View>
-                            </View>
-                        ))}
-                    </View>
-                )}
+                {/* Content */}
+                {activeTab === 'lab' && renderLabResults()}
+                {activeTab === 'medications' && renderMedications()}
+                {activeTab === 'prescriptions' && renderPrescriptions()}
 
                 <View style={{ height: 100 }} />
             </ScrollView>
@@ -351,122 +258,153 @@ export default function RecordsScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: theme.lightCream },
-    header: { backgroundColor: theme.tealDark, padding: 24, paddingTop: 60 },
-    title: { fontSize: 28, fontWeight: 'bold', color: theme.white },
-    subtitle: { fontSize: 14, color: theme.gray, marginTop: 4 },
-    tabBar: {
-        flexDirection: 'row', backgroundColor: theme.white,
-        paddingHorizontal: 20, paddingVertical: 8,
-        borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
+    container: {
+        flex: 1,
+        backgroundColor: theme.gradientStart,
     },
-    tab: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 8 },
-    tabActive: { backgroundColor: '#d1fae5' },
-    tabText: { fontSize: 14, color: theme.gray },
-    tabTextActive: { color: theme.primary, fontWeight: '600' },
-    content: { flex: 1 },
-    section: { padding: 20 },
-    
-    // Loading & Empty states
-    loadingContainer: { padding: 40, alignItems: 'center' },
-    loadingText: { fontSize: 14, color: theme.gray, marginTop: 12 },
-    emptyContainer: { padding: 40, alignItems: 'center' },
-    emptyIcon: { fontSize: 48, marginBottom: 12 },
-    emptyText: { fontSize: 18, fontWeight: '600', color: theme.darkNavy },
-    emptySubtext: { fontSize: 14, color: theme.gray, marginTop: 4 },
-    
-    // Lab Cards
-    labCard: {
-        backgroundColor: theme.white, borderRadius: 16, padding: 16, marginBottom: 16,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+    scrollContent: {
+        paddingTop: 60,
     },
-    criticalCard: {
-        backgroundColor: theme.criticalBg,
-        borderWidth: 2,
-        borderColor: theme.criticalBorder,
+    header: {
+        paddingHorizontal: 20,
+        paddingBottom: 20,
     },
-    labHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-    labName: { fontSize: 16, fontWeight: '600', color: theme.darkNavy, maxWidth: 200 },
-    labDate: { fontSize: 13, color: theme.gray, marginTop: 4 },
-    statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-    statusText: { fontSize: 12, fontWeight: '500' },
-    expandHint: { fontSize: 12, color: theme.gray, textAlign: 'center', marginTop: 12 },
-    
-    // Results
-    resultsContainer: { marginTop: 16, borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 12 },
-    resultRow: {
-        flexDirection: 'row', justifyContent: 'space-between',
-        paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+    headerTitle: {
+        fontSize: 28,
+        fontWeight: 'bold',
+        color: theme.white,
     },
-    resultTest: { fontSize: 14, color: theme.darkNavy, flex: 1 },
-    resultValues: { alignItems: 'flex-end' },
-    resultValue: { fontSize: 14, fontWeight: '600' },
-    resultRange: { fontSize: 11, color: theme.gray },
-    
-    // Summary
-    summaryBox: {
-        marginTop: 12, padding: 12, backgroundColor: '#f0fdf4',
-        borderRadius: 8, borderLeftWidth: 3, borderLeftColor: theme.primary,
+    headerSubtitle: {
+        fontSize: 14,
+        color: theme.textSecondary,
+        marginTop: 4,
     },
-    summaryTitle: { fontSize: 14, fontWeight: '600', color: theme.darkNavy },
-    summaryText: { fontSize: 13, color: theme.gray, marginTop: 4 },
-    
-    // Pending
-    pendingBox: {
-        marginTop: 12, padding: 12, backgroundColor: '#fef3c7',
-        borderRadius: 8, alignItems: 'center',
+    tabsContainer: {
+        marginBottom: 20,
     },
-    pendingText: { fontSize: 13, color: theme.warning },
-    
-    // Prescriptions
-    rxCard: {
-        backgroundColor: theme.white, borderRadius: 16, padding: 16, marginBottom: 16,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+    tabsContent: {
+        paddingHorizontal: 16,
+        gap: 8,
     },
-    rxHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-    rxDoctor: { fontSize: 16, fontWeight: '600', color: theme.darkNavy },
-    rxDate: { fontSize: 13, color: theme.gray, marginTop: 4 },
-    rxStatus: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-    rxActive: { backgroundColor: '#d1fae5' },
-    rxCompleted: { backgroundColor: '#f1f5f9' },
-    rxStatusText: { fontSize: 12, fontWeight: '500', textTransform: 'capitalize' },
-    medicineList: { gap: 12 },
-    medicineItem: {
-        backgroundColor: theme.lightCream, padding: 12, borderRadius: 10,
-        borderLeftWidth: 3, borderLeftColor: theme.primary,
+    tab: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        backgroundColor: theme.glassBackground,
+        marginRight: 8,
+        borderWidth: 1,
+        borderColor: theme.glassBorder,
     },
-    medicineName: { fontSize: 15, fontWeight: '600', color: theme.darkNavy },
-    medicineDosage: { fontSize: 13, color: theme.gray, marginTop: 4 },
-    medicineDuration: { fontSize: 12, color: theme.primary, marginTop: 2 },
-    
-    // Medications Tab
-    medCard: {
-        backgroundColor: theme.white, borderRadius: 16, padding: 16, marginBottom: 16,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+    tabActive: {
+        backgroundColor: theme.primary,
+        borderColor: theme.primary,
     },
-    controlledCard: {
-        backgroundColor: '#fffbeb',
-        borderWidth: 2,
-        borderColor: theme.warning,
+    tabIcon: {
+        fontSize: 16,
+        marginRight: 8,
     },
-    medHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-    medName: { fontSize: 16, fontWeight: '600', color: theme.darkNavy },
-    medGeneric: { fontSize: 13, color: theme.gray, marginTop: 2, fontStyle: 'italic' },
-    medQtyBadge: { backgroundColor: '#dbeafe', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-    medQtyText: { fontSize: 12, color: theme.info, fontWeight: '600' },
-    dosageBox: {
-        marginTop: 12, padding: 12, backgroundColor: '#f0fdf4',
-        borderRadius: 8, borderLeftWidth: 3, borderLeftColor: theme.primary,
+    tabText: {
+        fontSize: 14,
+        color: theme.textSecondary,
+        fontWeight: '500',
     },
-    dosageLabel: { fontSize: 12, fontWeight: '600', color: theme.darkNavy },
-    dosageText: { fontSize: 13, color: theme.gray, marginTop: 4 },
-    medDate: { fontSize: 12, color: theme.gray, marginTop: 12 },
-    controlledBadge: {
-        marginTop: 8, padding: 8, backgroundColor: '#fef3c7',
-        borderRadius: 6, alignItems: 'center',
+    tabTextActive: {
+        color: theme.white,
     },
-    controlledText: { fontSize: 12, color: theme.warning, fontWeight: '500' },
+    content: {
+        paddingHorizontal: 20,
+    },
+    glassCard: {
+        backgroundColor: theme.glassBackground,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: theme.glassBorder,
+        overflow: 'hidden',
+    },
+    recordCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        marginBottom: 12,
+    },
+    recordIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 14,
+        backgroundColor: 'rgba(20, 184, 166, 0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 14,
+    },
+    recordEmoji: {
+        fontSize: 24,
+    },
+    recordInfo: {
+        flex: 1,
+    },
+    recordName: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: theme.white,
+        marginBottom: 2,
+    },
+    recordDate: {
+        fontSize: 13,
+        color: theme.textMuted,
+    },
+    recordMeta: {
+        alignItems: 'flex-end',
+    },
+    statusBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 10,
+        marginBottom: 4,
+    },
+    statusText: {
+        fontSize: 11,
+        fontWeight: '600',
+        textTransform: 'capitalize',
+    },
+    valueText: {
+        fontSize: 12,
+        color: theme.textSecondary,
+    },
+    itemsBadge: {
+        backgroundColor: 'rgba(139, 92, 246, 0.2)',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 10,
+        marginBottom: 4,
+    },
+    itemsText: {
+        fontSize: 11,
+        color: theme.secondary,
+        fontWeight: '500',
+    },
+    viewLink: {
+        fontSize: 12,
+        color: theme.primary,
+    },
+    emptyCard: {
+        padding: 40,
+        alignItems: 'center',
+    },
+    emptyIcon: {
+        fontSize: 48,
+        marginBottom: 16,
+        opacity: 0.5,
+    },
+    emptyTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: theme.white,
+        marginBottom: 8,
+    },
+    emptyText: {
+        fontSize: 14,
+        color: theme.textMuted,
+    },
 });
