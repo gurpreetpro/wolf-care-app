@@ -3,13 +3,11 @@ name: Build Android APK
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
   build:
-    name: Build Android Debug APK
+    name: Build Android APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -18,27 +16,24 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 18
           cache: 'npm'
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - name: Setup Expo
+        uses: expo/expo-github-action@v8
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Install Dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm install --legacy-peer-deps
 
-      - name: Expo Prebuild
-        run: npx expo prebuild --platform android
-
-      - name: Build with Gradle
-        working-directory: android
-        run: ./gradlew assembleDebug
+      - name: Build APK
+        run: eas build --platform android --profile preview --non-interactive --local
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: pride-connect-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: pride-connect-apk
+          path: "*.apk"
