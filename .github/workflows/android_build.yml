@@ -31,7 +31,7 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Expo Prebuild
-        run: npx expo prebuild --platform android --no-interactive
+        run: npx expo prebuild --platform android
 
       - name: Build with Gradle
         working-directory: android
