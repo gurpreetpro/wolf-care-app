@@ -1,0 +1,16 @@
+node_modules/
+.expo/
+dist/
+web-build/
+.jsc/
+.npm/
+
+# Native
+android/
+ios/
+*.apk
+*.aab
+
+# OS
+.DS_Store
+Thumbs.db
