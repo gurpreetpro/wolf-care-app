@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { AuthService } from '../services/authService';
+import { useAuth } from '../context/AuthContext';
 // @ts-ignore
-import Logo from '../../assets/logo.png'; // Make sure this file exists from previous step
+import Logo from '../../assets/logo.png';
 
 export default function LoginScreen({ navigation }: any) {
+    const { login } = useAuth();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -17,20 +18,10 @@ export default function LoginScreen({ navigation }: any) {
         }
         setLoading(true);
         try {
-            await AuthService.login({ username, password });
-            // Navigation will auto-switch due to AuthContext/AppNavigator check, 
-            // but for now let's force a reload or rely on navigation props if we add a context later.
-            // For this MVP Navigator, we might need to manually trigger the state update in App.tsx
-            // But simpler: just reload or use a reset.
-            // Actually, AppNavigator checks SecureStore on mount. We need a way to refresh it.
-            // For V1, let's just use RN Restart or assume user re-opens. 
-            // BETTER: We'll fix AppNavigator to listen to a context later. 
-            // For now, let's just Alert Success.
-            Alert.alert('Success', 'Logged in!', [
-                { text: 'OK', onPress: () => { } } // In a real app, context updates here
-            ]);
+            await login(username, password);
+            // Navigation happens automatically via AuthContext
         } catch (error: any) {
-            Alert.alert('Login Failed', error.error || 'Unknown error');
+            Alert.alert('Login Failed', error.response?.data?.error || error.message || 'Unknown error');
         } finally {
             setLoading(false);
         }

@@ -1,38 +1,31 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import * as SecureStore from 'expo-secure-store';
 import { ActivityIndicator, View } from 'react-native';
+import { useAuth } from '../context/AuthContext';
 
-// Screens (Placeholders for now)
+// Screens
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import StarMapScreen from '../screens/StarMapScreen';
 import ChatScreen from '../screens/ChatScreen';
 import SafeModeScreen from '../screens/SafeModeScreen';
 import VideoCallScreen from '../screens/VideoCallScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import SettingsScreen from '../screens/SettingsScreen';
+import OTPScreen from '../screens/OTPScreen';
+import EditProfileScreen from '../screens/EditProfileScreen';
+import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
+import PrivacySettingsScreen from '../screens/PrivacySettingsScreen';
+import SecuritySettingsScreen from '../screens/SecuritySettingsScreen';
+import BlockedUsersScreen from '../screens/BlockedUsersScreen';
+import PhotoVerificationScreen from '../screens/PhotoVerificationScreen';
 
 
 const Stack = createNativeStackNavigator();
 
 export default function AppNavigator() {
-    const [isLoading, setIsLoading] = useState(true);
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-    useEffect(() => {
-        checkAuth();
-    }, []);
-
-    const checkAuth = async () => {
-        try {
-            const token = await SecureStore.getItemAsync('auth_token');
-            setIsAuthenticated(!!token);
-        } catch (e) {
-            console.error('Auth Check Failed', e);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+    const { isAuthenticated, isLoading } = useAuth();
 
     if (isLoading) {
         return (
@@ -51,6 +44,15 @@ export default function AppNavigator() {
                         <Stack.Screen name="Home" component={StarMapScreen} />
                         <Stack.Screen name="Chat" component={ChatScreen} />
                         <Stack.Screen name="VideoCall" component={VideoCallScreen} />
+                        <Stack.Screen name="Profile" component={ProfileScreen} />
+                        <Stack.Screen name="Settings" component={SettingsScreen} />
+                        <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
+                        <Stack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
+                        <Stack.Screen name="SecuritySettings" component={SecuritySettingsScreen} />
+                        <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
+                        <Stack.Screen name="PhotoVerification" component={PhotoVerificationScreen} options={{ presentation: 'modal' }} />
+                        <Stack.Screen name="VideoCall" component={VideoCallScreen} options={{ headerShown: false }} />
+                        <Stack.Screen name="EditProfile" component={EditProfileScreen} />
                         <Stack.Screen name="SafeMode" component={SafeModeScreen} options={{ gestureEnabled: false }} />
                     </Stack.Group>
                 ) : (
@@ -58,6 +60,7 @@ export default function AppNavigator() {
                     <Stack.Group>
                         <Stack.Screen name="Login" component={LoginScreen} />
                         <Stack.Screen name="Register" component={RegisterScreen} />
+                        <Stack.Screen name="OTP" component={OTPScreen} />
                     </Stack.Group>
                 )}
             </Stack.Navigator>
